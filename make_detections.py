@@ -5,11 +5,13 @@ from tqdm import tqdm
 from pathlib import Path
 from PIL import Image
 
+IS_DEBUG = False
+
 
 class Point:
     def __init__(self, w, h):
-        self.w = w
-        self.h = w
+        self.w = int(w)
+        self.h = int(h)
 
     def __contains__(self, other):
         return other.w <= self.w and other.h <= self.h
@@ -30,16 +32,29 @@ class Point:
 def get_points(rw, rh, x, y, w, h):
     p1 = Point(x * rw, y * rh)
     p2 = Point(p1.w + w * rw, p1.h + h * rh)
+    if IS_DEBUG:
+        print("==== Section 0 ====")
+        print(p1, p2)
+
+    #return p1, p2
 
     max_p = Point(rw, rh)
     p2 = Point(p2.max(), p2.max())
 
     # Use a square crop that fits right away
+    if IS_DEBUG:
+        print("==== Section 1 ====")
+        print(p1, p2)
     if p2 in max_p:
+        if IS_DEBUG:
+            print("Return on 1")
         return p1, p2
 
     # Move p1 and p2 diagonally back, as long as p1 stays positive
-    needed_diag = (p2 - max_p).max()
+    if IS_DEBUG:
+        print("==== Section 2 ====")
+        print(p1, p2)
+    needed_diag = p2 - max_p
 
     if needed_diag.max() == needed_diag.w:
         d_off = min(p1.w, needed_diag.w)
@@ -52,10 +67,15 @@ def get_points(rw, rh, x, y, w, h):
     p2 -= diag_off
 
     if p2 in max_p:
+        if IS_DEBUG:
+            print("Return on 2")
         return p1, p2
 
     # Move p1 and p2 in the maximal direction, until p1 is (0,0)
-    needed_diag = (p2 - max_p).max()
+    if IS_DEBUG:
+        print("==== Section 3 ====")
+        print(p1, p2)
+    needed_diag = p2 - max_p
 
     if p1.max() == p1.w and needed_diag.w > 0:
         max_offw = min(p1.max(), needed_diag.w)
@@ -70,15 +90,23 @@ def get_points(rw, rh, x, y, w, h):
     p2 -= max_off
 
     if p2 in max_p:
+        if IS_DEBUG:
+            print("Return on 3")
         return p1, p2
 
     # At this point p1 == (0,0)
+    if IS_DEBUG:
+        print("==== Section 4 ====")
+        print(p1, p2)
     distance_remaining = (p2 - max_p).max()
 
-    if distance_remaning > p2.min():
+    if distance_remaining > p2.min():
         raise OSError("Box crop is impossible")
     else:
-        p2 -= Point(distance_remaining, distance_remaining)
+        p2 = Point(min(p2.w, rw), min(p2.h, rh))
+        #p2 -= Point(distance_remaining, distance_remaining)
+        if IS_DEBUG:
+            print("Return on 4")
         return p1, p2
 
 
@@ -132,60 +160,18 @@ for i, json_file in enumerate(json_files):
             exeception_count += 1
             continue
 
-        image = image.crop((p1.w, p1.h, p2.w, p2.h))
-        image.save(out)
+        left = x * rw
+        upper = y * rh
+        right = left + w * rw
+        lower = upper + h * rh
+
+        try:
+            image = image.crop((p1.w, p1.h, p2.w, p2.h))
+            image.save(out)
+        except ValueError:
+            print(f"Failed with top_left={p1} & bottom_right={p2} on {path}")
+            print(f"OG @ ({left}, {upper}) & ({right}, {lower})")
+            exit(1)
+
 
     print(f"{exeception_count} exceptions in {dirname}")
-
-exit(1)
-
-# print(os.listdir('json_crops'))
-
-
-print(js["detection_categories"])
-
-
-# {
-#   file: str = path_to_image,
-#   max_detection_conf: float,
-#   detections: List[{category: int, conf: float, bbox: List[4]}]
-# }
-
-
-# Converted done here. Example:
-# {
-#     "/images/KinnardA_Nov16.100RECNX.IMG_0470.JPG": [
-#         {
-#             "category": "1",
-#             "conf": 0.939,
-#             "bbox": [
-#                 0.6694,
-#                 0.468,
-#                 0.2392,
-#                 0.1536
-#             ]
-#         }
-#     ]
-# }
-
-image_paths = os.listdir("images")
-filtered = {k: v for k, v in converted.items() if Path(k).name in image_paths}
-
-for path, detections in filtered.items():
-    path = Path(path)
-    path = Path("images") / path.name
-    out = Path("detected") / path.name
-
-    image = Image.open(path)
-
-    rw, rh = image.size
-
-    x, y, w, h = detections[0]["bbox"]
-
-    try:
-        p1, p2 = get_points(rw, rh, x, y, w, h)
-    except:
-        continue
-
-    image = image.crop((p1.w, p1.h, p2.w, p2.h))
-    image.save(out)
