@@ -1,0 +1,16 @@
+version: '3.3'
+services:
+  megadetector:
+    image: zaandahl/megadetector
+    environment:
+      - CUDA_VISIBLE_DEVICES=0
+      - CUDA_LAUNCH_BLOCKING=1
+    volumes:
+      - "/home/emiliko/safe/megacropped/images/Summer_2010:/images"
+    tty: true
+    shm_size: "8gb"
+    deploy:
+      resources:
+        limits:
+          cpus: '12'
+          memory: 32G
